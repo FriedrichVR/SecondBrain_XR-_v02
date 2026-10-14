@@ -12,22 +12,22 @@ import {
 } from "@/utils/jsonToHierarchy";
 
 /* ------------------------------------------------------------------ */
-/* Palette (matches the JSON Crack reference)                          */
+/* Minimalist palette                                                    */
 /* ------------------------------------------------------------------ */
 
-const C_BODY = "#1e1e21";
-const C_EDGE = "#45454c";
-const C_EDGE_HOVER = "#6cb2f5";
-const C_KEY = "#6cb2f5";
-const C_INDEX = "#9a9a9e";
-const C_BADGE = "#8e8e93";
-const C_STRING = "#e8e8ea";
-const C_NUMBER = "#d8a24a";
+const C_BODY = "#141417";
+const C_SHELL = "#2b2b31";
+const C_KEY_BRANCH = "#6cb2f5";
+const C_KEY_LEAF = "#a7a7b0";
+const C_TITLE = "#f4f4f6";
+const C_STRING = "#f0f0f2";
+const C_NUMBER = "#e5b567";
 const C_BOOL_T = "#7dd87d";
 const C_BOOL_F = "#e57d7d";
-const C_NULL = "#6f6f75";
-const C_TOGGLE = "#2e2e33";
-const C_SEPARATOR = "#2e2e33";
+const C_NULL = "#63636a";
+const C_TOGGLE = "#232329";
+const C_TOGGLE_HOVER = "#35353c";
+const C_SEPARATOR = "#232329";
 
 function valueColor(v: string | number | boolean | null): string {
   if (v === null || v === "null") return C_NULL;
@@ -53,6 +53,8 @@ export interface SpatialCard3DProps {
   node: SpatialNode;
   width: number;
   height: number;
+  /** Hierarchy accent colour (by depth). */
+  accent: string;
   /** World-group ref: drag math is computed in this group's local space. */
   worldRef: React.RefObject<THREE.Group | null>;
   /** True when this node's children are collapsed. */
@@ -67,18 +69,20 @@ export interface SpatialCard3DProps {
 const DRAG_CLAMP = 14;
 
 /* ------------------------------------------------------------------ */
-/* Toggle button ([+]/[-]) — oversized hit area for Quest controller rays */
+/* Toggle pill ([+]/[-]) — oversized hit area for Quest controller rays  */
 /* ------------------------------------------------------------------ */
 
 function ToggleButton({
   glyph,
   position,
   onActivate,
+  accent,
   size = 0.17,
 }: {
   glyph: string;
   position: [number, number, number];
   onActivate: () => void;
+  accent: string;
   size?: number;
 }) {
   const [hover, setHover] = useState(false);
@@ -97,12 +101,12 @@ function ToggleButton({
         onPointerOut={() => setHover(false)}
       >
         <boxGeometry args={[size, size, 0.09]} />
-        <meshStandardMaterial color={hover ? "#3d3d44" : C_TOGGLE} roughness={0.7} toneMapped={false} />
+        <meshStandardMaterial color={hover ? C_TOGGLE_HOVER : C_TOGGLE} roughness={0.6} />
       </mesh>
       <Text
         position={[0, 0, 0.051]}
-        fontSize={size * 0.72}
-        color="#ffffff"
+        fontSize={size * 0.68}
+        color={hover ? accent : "#ffffff"}
         anchorX="center"
         anchorY="middle"
       >
@@ -113,13 +117,14 @@ function ToggleButton({
 }
 
 /* ------------------------------------------------------------------ */
-/* Spatial card                                                          */
+/* Spatial card — minimalist floating panel                             */
 /* ------------------------------------------------------------------ */
 
 function SpatialCard3DInner({
   node,
   width,
   height,
+  accent,
   worldRef,
   collapsed,
   collapsedIds,
@@ -137,14 +142,14 @@ function SpatialCard3DInner({
 
   const top = height / 2;
   const left = -width / 2;
-  const textX = left + 0.32; // key column (after toggle gutter)
-  const valueX = left + 1.04; // value / badge column — fixed gutter so columns never overlap
-  const KEY_MAX = 0.68; // max metres of key text before clipping
-  const VALUE_MAX = 0.74; // max metres of value / badge text before clipping
+  const textX = left + 0.34; // key column (after accent bar + toggle gutter)
+  const valueX = left + 1.06; // value / badge column — fixed gutter, never overlaps
+  const KEY_MAX = 0.68;
+  const VALUE_MAX = 0.72;
   const headerY = top - CARD_HEADER_H / 2;
   const rowTop = top - CARD_HEADER_H;
 
-  /* --- drag handling (Trigger ray or mouse; Grip grab works via the same ray) --- */
+  /* --- drag handling (Trigger ray or mouse) --- */
   const toLocal = (point: THREE.Vector3): THREE.Vector3 | null => {
     const world = worldRef.current;
     if (!world || !group.current) return null;
@@ -195,6 +200,11 @@ function SpatialCard3DInner({
         registerGroup(node.id, g);
       }}
     >
+      {/* Border shell — subtle ring, glows with the depth accent on hover */}
+      <RoundedBox args={[width + 0.03, height + 0.03, 0.045]} radius={0.035} smoothness={3} position={[0, 0, -0.008]}>
+        <meshStandardMaterial color={hovered ? accent : C_SHELL} roughness={0.5} metalness={0.2} />
+      </RoundedBox>
+
       {/* Card body */}
       <RoundedBox
         args={[width, height, 0.06]}
@@ -213,38 +223,39 @@ function SpatialCard3DInner({
           document.body.style.cursor = "auto";
         }}
       >
-        <meshStandardMaterial
-          color={hovered ? "#242428" : C_BODY}
-          roughness={0.85}
-          metalness={0.05}
-          emissive={hovered ? "#0a1626" : "#000000"}
-          toneMapped={false}
-        />
+        <meshStandardMaterial color={C_BODY} roughness={0.5} metalness={0.2} />
       </RoundedBox>
+
+      {/* Depth accent bar */}
+      <mesh position={[left + 0.1, 0, 0.005]}>
+        <boxGeometry args={[0.045, Math.max(0.1, height - 0.2), 0.075]} />
+        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.5} roughness={0.4} />
+      </mesh>
 
       {/* Header: [-] key: {n keys} */}
       {hasBranches && (
         <ToggleButton
           glyph={collapsed ? "+" : "–"}
-          position={[left + 0.15, headerY, 0.06]}
+          position={[left + 0.26, headerY, 0.06]}
           onActivate={() => onToggle(node.id)}
+          accent={accent}
         />
       )}
       <Text
         position={[textX, headerY, 0.035]}
-        fontSize={0.09}
-        color={C_KEY}
+        fontSize={0.092}
+        color={C_TITLE}
         anchorX="left"
         anchorY="middle"
         maxWidth={KEY_MAX}
         whiteSpace="nowrap"
       >
-        {truncate(node.key + ":", 22)}
+        {truncate(node.key, 20)}
       </Text>
       <Text
         position={[valueX, headerY, 0.035]}
-        fontSize={0.084}
-        color={C_BADGE}
+        fontSize={0.08}
+        color={accent}
         anchorX="left"
         anchorY="middle"
         maxWidth={VALUE_MAX}
@@ -255,7 +266,7 @@ function SpatialCard3DInner({
 
       {/* Rows */}
       {rows.length === 0 && (
-        <Text position={[textX, rowTop - CARD_ROW_H / 2, 0.035]} fontSize={0.08} color={C_NULL} anchorX="left" anchorY="middle" whiteSpace="nowrap">
+        <Text position={[textX, rowTop - CARD_ROW_H / 2, 0.035]} fontSize={0.078} color={C_NULL} anchorX="left" anchorY="middle" whiteSpace="nowrap">
           {"{empty}"}
         </Text>
       )}
@@ -263,7 +274,7 @@ function SpatialCard3DInner({
         const y = rowTop - i * CARD_ROW_H - CARD_ROW_H / 2;
         if (row.kind === "more") {
           return (
-            <Text key={`more-${i}`} position={[textX, y, 0.035]} fontSize={0.078} color={C_BADGE} anchorX="left" anchorY="middle" whiteSpace="nowrap">
+            <Text key={`more-${i}`} position={[textX, y, 0.035]} fontSize={0.076} color={C_NULL} anchorX="left" anchorY="middle" whiteSpace="nowrap">
               {`+${row.count} more…`}
             </Text>
           );
@@ -274,33 +285,34 @@ function SpatialCard3DInner({
         return (
           <group key={isBranch ? row.child.id : `leaf-${key}-${i}`} position={[0, y, 0]}>
             {/* separator */}
-            <mesh position={[0, CARD_ROW_H / 2, 0.032]}>
-              <planeGeometry args={[width - 0.24, 0.006]} />
-              <meshBasicMaterial color={C_SEPARATOR} toneMapped={false} />
+            <mesh position={[0.04, CARD_ROW_H / 2, 0.032]}>
+              <planeGeometry args={[width - 0.34, 0.006]} />
+              <meshBasicMaterial color={C_SEPARATOR} />
             </mesh>
             {isBranch && (
               <ToggleButton
                 glyph={childCollapsed ? "+" : "–"}
-                position={[left + 0.15, 0, 0.06]}
+                position={[left + 0.26, 0, 0.06]}
                 onActivate={() => onToggle(row.child.id)}
+                accent={accent}
                 size={0.155}
               />
             )}
             <Text
               position={[textX, 0, 0.035]}
               fontSize={0.08}
-              color={isBranch ? C_KEY : C_INDEX}
+              color={isBranch ? C_KEY_BRANCH : C_KEY_LEAF}
               anchorX="left"
               anchorY="middle"
               maxWidth={KEY_MAX}
               whiteSpace="nowrap"
             >
-              {truncate(isBranch ? row.child.key + ":" : key + ":", 14)}
+              {truncate(key, 14)}
             </Text>
             <Text
               position={[valueX, 0, 0.035]}
               fontSize={0.078}
-              color={isBranch ? C_BADGE : valueColor(row.value)}
+              color={isBranch ? C_KEY_LEAF : valueColor(row.value)}
               anchorX="left"
               anchorY="middle"
               maxWidth={VALUE_MAX}

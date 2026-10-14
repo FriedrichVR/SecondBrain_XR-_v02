@@ -1,12 +1,14 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
+import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Grid, OrbitControls } from "@react-three/drei";
 import { XR, XROrigin } from "@react-three/xr";
 import type { XRStore } from "@react-three/xr";
 import { Expand, Maximize2, Minimize2, RotateCcw } from "lucide-react";
 import SpatialJsonTree3D, { type SpatialJsonTree3DHandle, type TreeStats } from "./SpatialJsonTree3D";
+import WorldRig from "./WorldRig";
 import { getXRStore } from "@/utils/xrStore";
 
 /* ------------------------------------------------------------------ */
@@ -23,6 +25,7 @@ interface VRCanvasProps {
 export default function VRCanvas({ data, onStats }: VRCanvasProps) {
   const [store, setStore] = useState<XRStore | null>(null);
   const treeRef = useRef<SpatialJsonTree3DHandle>(null);
+  const originRef = useRef<THREE.Group>(null);
 
   // Client-only store creation (SSR-safe: effect never runs on the server).
   useEffect(() => {
@@ -50,7 +53,9 @@ export default function VRCanvas({ data, onStats }: VRCanvasProps) {
           <directionalLight position={[4, 6, 3]} intensity={1.4} />
           <hemisphereLight args={["#3a3a44", "#0c0c0e", 0.5]} />
 
-          <XROrigin position={[0, 0, 0.4]} />
+          <XROrigin ref={originRef} position={[0, 0, 0.4]} />
+          {/* Quest locomotion (thumbsticks) + Grip manipulation (1/2 hands) */}
+          <WorldRig originRef={originRef} treeRef={treeRef} />
 
           {/* Dark grid floor — spatial reference for VR depth perception */}
           <Grid

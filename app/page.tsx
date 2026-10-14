@@ -89,7 +89,7 @@ export default function HomePage() {
             </li>
             <li className="flex gap-2">
               <Hand size={15} className="mt-0.5 shrink-0 text-keyblue" />
-              <span><b className="text-zinc-200">In VR:</b> aim the controller ray + Trigger to toggle, grab cards to move them, drag empty space to pan the diagram.</span>
+              <span><b className="text-zinc-200">En VR (Quest):</b> rayo + <b className="text-zinc-200">Trigger</b> para +/− y arrastrar cards · <b className="text-zinc-200">Grip</b> con una mano para mover el diagrama · <b className="text-zinc-200">ambos Grips</b> para escalar (pinch) y rotar · stick <b className="text-zinc-200">izquierdo</b> para desplazarte · stick <b className="text-zinc-200">derecho</b> para girar 30°.</span>
             </li>
             <li className="flex gap-2">
               <Move3d size={15} className="mt-0.5 shrink-0 text-keyblue" />

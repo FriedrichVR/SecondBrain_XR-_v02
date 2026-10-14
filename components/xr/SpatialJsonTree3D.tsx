@@ -13,7 +13,11 @@ import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import {
+  CARD_HEADER_H,
+  CARD_ROW_H,
   defaultCollapsedSet,
+  depthAccent,
+  displayRows,
   flattenTree,
   getVisibleNodesAndEdges,
   layoutTree,
@@ -31,12 +35,22 @@ export interface TreeStats {
   total: number;
 }
 
+export interface WorldState {
+  position: [number, number, number];
+  rotationY: number;
+  scale: number;
+}
+
 export interface SpatialJsonTree3DHandle {
   expandAll: () => void;
   collapseAll: () => void;
   resetView: () => void;
   zoom: (factor: number) => void;
   rotateY: (delta: number) => void;
+  /** Direct access to the world group for per-frame VR manipulation (no re-renders). */
+  getWorldGroup: () => THREE.Group | null;
+  /** Persist the group's current transform into React state (call on gesture release). */
+  commitWorld: () => void;
 }
 
 interface Props {
@@ -48,14 +62,18 @@ const HOME = { position: [0, 1.5, -2] as [number, number, number], rotationY: 0,
 const LINE_SAMPLES = 20;
 const MAX_VISIBLE_CARDS = 160;
 
-/* Cubic bezier sampling between card edges (parent right -> child left). */
+/* Cubic bezier sampling between card edges: exits the parent's right edge
+   at the child's own row height (fromRowOffY, metres above card centre)
+   and lands on the child's left edge — each union visually belongs to
+   its parent/child row pair. */
 function sampleCurve(
   from: THREE.Vector3,
   fromW: number,
+  fromRowOffY: number,
   to: THREE.Vector3,
   toW: number
 ): { points: [number, number, number][]; mid: [number, number, number] } {
-  const p0 = new THREE.Vector3(from.x + fromW / 2, from.y, from.z);
+  const p0 = new THREE.Vector3(from.x + fromW / 2, from.y + fromRowOffY, from.z);
   const p3 = new THREE.Vector3(to.x - toW / 2, to.y, to.z);
   const dx = Math.max(0.6, p3.x - p0.x);
   const p1 = new THREE.Vector3(p0.x + dx * 0.5, p0.y, p0.z);
@@ -101,6 +119,25 @@ const SpatialJsonTree3D = forwardRef<SpatialJsonTree3DHandle, Props>(function Sp
     return m;
   }, [layout]);
 
+  /**
+   * Row index of each edge's child inside its parent card (branch rows come
+   * first in display order). Drives the row-anchored connector start point.
+   */
+  const edgeRow = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of layout.edges) {
+      const parent = nodeById.get(e.from);
+      const rows = parent ? displayRows(parent) : [];
+      let idx = rows.findIndex((r) => r.kind === "branch" && r.child.id === e.to);
+      if (idx < 0) idx = Math.max(0, rows.length - 1);
+      m.set(`${e.from}→${e.to}`, idx);
+    }
+    return m;
+  }, [layout, nodeById]);
+
+  const edgeRowRef = useRef(edgeRow);
+  edgeRowRef.current = edgeRow;
+
   useEffect(() => {
     onStats?.({ visible: layout.visibleCount, total: layout.totalCount });
   }, [layout, onStats]);
@@ -128,20 +165,41 @@ const SpatialJsonTree3D = forwardRef<SpatialJsonTree3DHandle, Props>(function Sp
     offsets.current.clear();
     setWorld(HOME);
   }, []);
-  const zoom = useCallback((f: number) => {
-    setWorld((w) => ({ ...w, scale: THREE.MathUtils.clamp(w.scale * f, 0.3, 2.5) }));
+  /** Read the live group transform back into React state. */
+  const commitWorld = useCallback(() => {
+    const g = worldGroup.current;
+    if (!g) return;
+    setWorld({
+      position: [g.position.x, g.position.y, g.position.z],
+      rotationY: g.rotation.y,
+      scale: g.scale.x,
+    });
   }, []);
-  const rotateY = useCallback((d: number) => {
-    setWorld((w) => ({ ...w, rotationY: w.rotationY + d }));
-  }, []);
+  const getWorldGroup = useCallback(() => worldGroup.current, []);
+  const zoom = useCallback(
+    (f: number) => {
+      const g = worldGroup.current;
+      if (!g) return;
+      g.scale.setScalar(THREE.MathUtils.clamp(g.scale.x * f, 0.3, 2.5));
+      commitWorld();
+    },
+    [commitWorld]
+  );
+  const rotateY = useCallback(
+    (d: number) => {
+      const g = worldGroup.current;
+      if (!g) return;
+      g.rotation.y += d;
+      commitWorld();
+    },
+    [commitWorld]
+  );
 
-  useImperativeHandle(ref, () => ({ expandAll, collapseAll, resetView, zoom, rotateY }), [
-    expandAll,
-    collapseAll,
-    resetView,
-    zoom,
-    rotateY,
-  ]);
+  useImperativeHandle(
+    ref,
+    () => ({ expandAll, collapseAll, resetView, zoom, rotateY, getWorldGroup, commitWorld }),
+    [expandAll, collapseAll, resetView, zoom, rotateY, getWorldGroup, commitWorld]
+  );
 
   /* ------------------------- registration ------------------------- */
 
@@ -243,7 +301,9 @@ const SpatialJsonTree3D = forwardRef<SpatialJsonTree3DHandle, Props>(function Sp
       const pa: PlacedNode | undefined = L.nodes.get(e.from);
       const pb: PlacedNode | undefined = L.nodes.get(e.to);
       if (!a || !b || !pa || !pb) continue;
-      const { points, mid } = sampleCurve(a, pa.width, b, pb.width);
+      const rowIdx = edgeRowRef.current.get(`${e.from}→${e.to}`) ?? 0;
+      const rowOffY = pa.height / 2 - CARD_HEADER_H - rowIdx * CARD_ROW_H - CARD_ROW_H / 2;
+      const { points, mid } = sampleCurve(a, pa.width, rowOffY, b, pb.width);
       const line = lines.current.get(`${e.from}→${e.to}`) as unknown as
         | { geometry: { setPositions: (arr: number[]) => void } }
         | undefined;
@@ -282,6 +342,7 @@ const SpatialJsonTree3D = forwardRef<SpatialJsonTree3DHandle, Props>(function Sp
             node={node}
             width={p.width}
             height={p.height}
+            accent={depthAccent(node.depth)}
             worldRef={worldGroup}
             collapsed={collapsed.has(p.id)}
             collapsedIds={collapsed}
@@ -295,11 +356,16 @@ const SpatialJsonTree3D = forwardRef<SpatialJsonTree3DHandle, Props>(function Sp
       {shownEdges.map((e) => {
         const a = layout.nodes.get(e.from);
         const b = layout.nodes.get(e.to);
-        if (!a || !b) return null;
+        const parent = nodeById.get(e.from);
+        const child = nodeById.get(e.to);
+        if (!a || !b || !parent || !child) return null;
         const key = `${e.from}→${e.to}`;
+        const rowIdx = edgeRow.get(key) ?? 0;
+        const rowOffY = a.height / 2 - CARD_HEADER_H - rowIdx * CARD_ROW_H - CARD_ROW_H / 2;
         const { points, mid } = sampleCurve(
           new THREE.Vector3(a.x, a.y, a.z),
           a.width,
+          rowOffY,
           new THREE.Vector3(b.x, b.y, b.z),
           b.width
         );
@@ -308,6 +374,8 @@ const SpatialJsonTree3D = forwardRef<SpatialJsonTree3DHandle, Props>(function Sp
             key={key}
             edgeKey={key}
             label={e.label}
+            color={depthAccent(parent.depth)}
+            endColor={depthAccent(child.depth)}
             initialPoints={points}
             initialMid={mid}
             registerLine={registerLine}

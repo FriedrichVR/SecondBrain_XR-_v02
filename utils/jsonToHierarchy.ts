@@ -285,6 +285,19 @@ export function layoutTree(root: SpatialNode, collapsed: Set<string>, opts: Layo
 }
 
 /* ------------------------------------------------------------------ */
+/* Depth accent palette — minimalist hierarchy colour-coding shared by   */
+/* cards, connector lines and badges.                                    */
+/* ------------------------------------------------------------------ */
+
+const DEPTH_ACCENTS = ["#6cb2f5", "#b794f6", "#5fd4c0", "#e5b567", "#ef8fa3"] as const;
+
+/** Accent colour for a tree depth (cycles past the palette length). */
+export function depthAccent(depth: number): string {
+  if (depth < 0) return "#8e8e93";
+  return DEPTH_ACCENTS[depth % DEPTH_ACCENTS.length];
+}
+
+/* ------------------------------------------------------------------ */
 /* Sample data (mirrors the reference screenshot)                        */
 /* ------------------------------------------------------------------ */
 
