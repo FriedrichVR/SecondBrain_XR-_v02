@@ -1,0 +1,7 @@
+{
+  "componentes": {
+    "comp_mecanico_01": { "celda": "DISS", "tag": "RMB_Mech_001", "posX": 80.59, "posY": 33.23, "posZ": 2.54 },
+    "comp_mecanico_02": { "celda": "DISS", "tag": "RMB_Mech_002", "posX": 83.95, "posY": 65.53, "posZ": 6.33 },
+    "comp_mecanico_03": { "celda": "DISS", "tag": "RMB_Mech_003", "posX": 83.95, "posY": 65.53, "posZ": 6.33 }
+  }
+}
